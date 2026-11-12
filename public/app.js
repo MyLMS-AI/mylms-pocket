@@ -324,9 +324,10 @@
       const res = await fetch("/api/offline/courses");
       if (!res.ok) return;
       const data = await res.json();
-      if (data && Array.isArray(data.courses)) {
-        state.catalog = data.courses;
-        await idbPut("catalogCache", { id: "latest", courses: data.courses, updatedAt: Date.now() });
+      const list = Array.isArray(data) ? data : data && Array.isArray(data.courses) ? data.courses : null;
+      if (list) {
+        state.catalog = list;
+        await idbPut("catalogCache", { id: "latest", courses: list, updatedAt: Date.now() });
         render();
       }
     } catch {}
@@ -338,11 +339,12 @@
       return;
     }
     try {
-      const res = await fetch("/api/offline/curation/courses", { credentials: "include" });
+      const res = await fetch("/api/offline/admin/courses", { credentials: "include" });
       if (!res.ok) return;
       const data = await res.json();
-      if (data && Array.isArray(data.courses)) {
-        state.curationList = data.courses;
+      const list = Array.isArray(data) ? data : data && Array.isArray(data.courses) ? data.courses : null;
+      if (list) {
+        state.curationList = list;
         render();
       }
     } catch {}
@@ -352,14 +354,13 @@
     state.curationSavingId = courseId;
     render();
     try {
-      const res = await fetch(`/api/offline/curation/courses/${encodeURIComponent(courseId)}`, {
-        method: "PUT",
+      const res = await fetch(`/api/offline/admin/courses/${encodeURIComponent(courseId)}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           enabled: nextEnabled,
           featured: Boolean(featured),
-          updatedBy: state.user ? state.user.email : state.studentEmail,
         }),
       });
       if (!res.ok) throw new Error("Falha ao atualizar curadoria");
