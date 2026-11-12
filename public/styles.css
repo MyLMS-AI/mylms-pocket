@@ -75,6 +75,15 @@ button, a, input, textarea, select {
   color: var(--emerald);
   font-weight: 600;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 560px) {
+  .brand-sub {
+    display: none;
+  }
 }
 
 .topbar-actions {
