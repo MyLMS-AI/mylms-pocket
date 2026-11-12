@@ -84,6 +84,25 @@ button, a, input, textarea, select {
   .brand-sub {
     display: none;
   }
+  .topbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .brand-logo {
+    width: 28px;
+    height: 28px;
+  }
+  .brand-title {
+    font-size: 13px;
+  }
+  .pill {
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+  .topbar-actions .btn {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
 }
 
 .topbar-actions {
@@ -281,6 +300,14 @@ button, a, input, textarea, select {
 @media (max-width: 900px) {
   .player-shell {
     grid-template-columns: 1fr;
+  }
+  .player-shell .slide-card {
+    order: 1;
+  }
+  .player-shell .sidebar-card {
+    order: 2;
+    max-height: 320px;
+    overflow-y: auto;
   }
 }
 
