@@ -1,14 +1,14 @@
 {
-  "name": "MyLMS Pocket — Offline-First Open-Source Player",
+  "name": "MyLMS Pocket — Player Offline-First",
   "short_name": "MyLMS Pocket",
-  "description": "Player educacional Open-Source Offline-First para estudo sem internet com sincronização inteligente e Tutor IA Local (<=10B).",
+  "description": "Ambiente Virtual de Aprendizagem Offline-First do MyLMS com pacotes de cursos locais (IndexedDB + CacheStorage), correção instantânea no aparelho e Tutor IA Open-Source (<=10B).",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#070b14",
-  "theme_color": "#10b981",
-  "categories": ["education", "books"],
+  "background_color": "#0a0a0a",
+  "theme_color": "#fdb913",
+  "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",

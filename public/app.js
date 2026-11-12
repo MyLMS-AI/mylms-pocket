@@ -5,6 +5,7 @@
 
   const state = {
     view: "catalog",
+    theme: localStorage.getItem("mylms_pocket_theme") || "dark",
     simulatedOffline: false,
     onlineCourses: [],
     downloadedPackages: [],
@@ -21,6 +22,19 @@
     downloadingSlug: null,
     downloadProgress: 0,
   };
+
+  function applyTheme() {
+    const html = document.documentElement;
+    if (state.theme === "light") {
+      html.classList.remove("dark");
+    } else {
+      html.classList.add("dark");
+    }
+    const btn = document.getElementById("btnThemeToggle");
+    if (btn) {
+      btn.textContent = state.theme === "dark" ? "☀️" : "🌙";
+    }
+  }
 
   function isEffectivelyOnline() {
     return navigator.onLine && !state.simulatedOffline;
@@ -92,20 +106,31 @@
       .replace(/>/g, "&gt;");
   }
 
+  function render10Segments(percent) {
+    const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+    let segs = "";
+    for (let i = 0; i < 10; i++) {
+      const threshold = ((i + 1) / 10) * 100;
+      const done = p >= threshold;
+      segs += `<span class="mylms-seg ${done ? "done" : ""}"></span>`;
+    }
+    return `<div class="mylms-segments">${segs}</div>`;
+  }
+
   function renderMarkdown(md) {
     if (!md) return "";
     let html = escapeHtml(md);
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" loading="lazy" />');
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color:#38bdf8">$1</a>');
-    html = html.replace(/^### (.*)$/gm, '<h3 style="margin:14px 0 6px;color:#f8fafc">$1</h3>');
-    html = html.replace(/^## (.*)$/gm, '<h2 style="margin:16px 0 8px;color:#10b981;font-size:18px">$1</h2>');
-    html = html.replace(/^# (.*)$/gm, '<h1 style="margin:16px 0 10px;font-size:20px">$1</h1>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color:var(--primary);font-weight:700">$1</a>');
+    html = html.replace(/^### (.*)$/gm, '<h3 style="margin:14px 0 6px;font-size:17px">$1</h3>');
+    html = html.replace(/^## (.*)$/gm, '<h2 style="margin:16px 0 8px;color:var(--primary);font-size:19px">$1</h2>');
+    html = html.replace(/^# (.*)$/gm, '<h1 style="margin:16px 0 10px;font-size:21px">$1</h1>');
     html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-    html = html.replace(/`([^`]+)`/g, '<code style="background:#1e293b;padding:2px 6px;border-radius:5px;font-size:13px">$1</code>');
-    html = html.replace(/\n\n+/g, "</p><p style='margin:0 0 10px'>");
+    html = html.replace(/`([^`]+)`/g, '<code style="background:var(--surface-950);padding:2px 6px;border-radius:5px;font-size:13px">$1</code>');
+    html = html.replace(/\n\n+/g, "</p><p style='margin:0 0 12px'>");
     html = html.replace(/\n/g, "<br/>");
-    return `<p style="margin:0 0 10px">${html}</p>`;
+    return `<p style="margin:0 0 12px">${html}</p>`;
   }
 
   async function enqueueSyncEvent(ev) {
@@ -368,7 +393,6 @@
       } catch {}
     }
 
-    // Local Offline SLM fallback
     const cleanSnippet = slideText.replace(/[#*`>_~-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 360);
     state.tutorMessages.push({
       role: "assistant",
@@ -389,8 +413,8 @@
       pill.textContent = online
         ? "● Online"
         : state.simulatedOffline
-        ? "✈️ Modo Avião (Simulado)"
-        : "📴 Sem Internet (Offline)";
+        ? "✈️ Modo Avião"
+        : "📴 Offline";
     }
     const qCount = document.getElementById("syncQueueCount");
     if (qCount) {
@@ -414,6 +438,7 @@
           slug: pkg.slug,
           title: pkg.bundle.course.title,
           description: pkg.bundle.course.description,
+          image: pkg.bundle.course.image,
           stats: pkg.bundle.stats,
         });
       }
@@ -426,74 +451,79 @@
         const doneLessons = localPkg ? (localPkg.localProgress.completedLessonIds || []).length : 0;
         const pct = totalLessons > 0 ? Math.min(100, Math.round((doneLessons / totalLessons) * 100)) : 0;
         const isDownloading = state.downloadingSlug === c.slug;
+        const coverImg = c.image || "/bg-hero-dark.png";
 
         return `
           <article class="course-card">
-            <div>
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-                <span class="tag" style="color:${localPkg ? "#34d399" : "#94a3b8"}">
-                  ${localPkg ? "✅ Baixado no Aparelho" : "☁️ Disponível para Download"}
+            <div class="course-cover">
+              <img src="${escapeHtml(coverImg)}" alt="${escapeHtml(c.title)}" loading="lazy" onerror="this.src='/bg-hero-dark.png'" />
+              <div class="course-cover-overlay"></div>
+              <div class="course-cover-badges">
+                <span class="badge-status ${localPkg ? "badge-downloaded" : "badge-cloud"}">
+                  ${localPkg ? "✓ Baixado no Aparelho" : "☁️ Pacote Disponível"}
                 </span>
-                <span style="font-size:11px;color:#94a3b8">
+                <span class="badge-size">
                   📦 ${formatBytes(c.stats && c.stats.estimatedSizeNoVideoBytes)}
                 </span>
               </div>
-              <h3>${escapeHtml(c.title)}</h3>
-              <p>${escapeHtml(c.description || "Curso estruturado com slides interativos, questões corrigidas localmente e sincronização automática.")}</p>
+              <div class="course-cover-title">
+                <span>CURSO • MYLMS POCKET</span>
+                <h3>${escapeHtml(c.title)}</h3>
+              </div>
             </div>
 
-            <div>
-              <div class="course-meta">
-                <span>📚 ${(c.stats && c.stats.modulesCount) || 1} mód.</span>
-                <span>•</span>
-                <span>🎯 ${totalLessons} aulas</span>
-                <span>•</span>
-                <span>📑 ${(c.stats && c.stats.slidesCount) || 0} slides</span>
+            <div class="course-body">
+              <div>
+                <p class="course-desc">
+                  ${escapeHtml(c.description || "Curso interativo com slides, questões corrigidas localmente no aparelho e sincronização inteligente.")}
+                </p>
+                <div class="course-meta" style="margin-top:8px">
+                  <span>📚 ${(c.stats && c.stats.modulesCount) || 1} mód.</span>
+                  <span>•</span>
+                  <span>🎯 ${totalLessons} aulas</span>
+                  <span>•</span>
+                  <span>📑 ${(c.stats && c.stats.slidesCount) || 0} slides</span>
+                </div>
               </div>
 
-              ${
-                localPkg
-                  ? `
-                    <div style="margin:8px 0">
-                      <div style="display:flex;justify-content:space-between;font-size:11px;color:#cbd5e1">
-                        <span>Progresso Offline/Sync</span>
-                        <strong>${pct}% (${doneLessons}/${totalLessons})</strong>
-                      </div>
-                      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-                    </div>
-                  `
-                  : ""
-              }
+              <div>
+                <div class="mylms-seg-row">
+                  <span class="mylms-seg-label">${pct}% concluído</span>
+                  ${render10Segments(pct)}
+                </div>
 
-              ${
-                isDownloading
-                  ? `
-                    <div style="margin-top:10px">
-                      <div style="font-size:12px;color:#34d399;margin-bottom:4px">Baixando pacote para IndexedDB... ${state.downloadProgress}%</div>
-                      <div class="progress-track"><div class="progress-fill" style="width:${state.downloadProgress}%"></div></div>
-                    </div>
-                  `
-                  : `
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
-                      ${
-                        localPkg
-                          ? `
-                            <button type="button" class="btn btn-primary" style="flex:1" data-action="open-course" data-slug="${escapeHtml(c.slug)}">
-                              ▶️ Estudar Agora (Offline)
-                            </button>
-                            <button type="button" class="btn" title="Atualizar pacote" data-action="download-course" data-slug="${escapeHtml(c.slug)}">
-                              🔄
-                            </button>
-                          `
-                          : `
-                            <button type="button" class="btn btn-primary" style="flex:1" data-action="download-course" data-slug="${escapeHtml(c.slug)}">
-                              ⬇️ Baixar Pacote Leve (${formatBytes(c.stats && c.stats.estimatedSizeNoVideoBytes)})
-                            </button>
-                          `
-                      }
-                    </div>
-                  `
-              }
+                ${
+                  isDownloading
+                    ? `
+                      <div style="margin-top:10px">
+                        <div style="font-size:12px;color:var(--primary);font-weight:700;margin-bottom:4px">
+                          Salvando no IndexedDB... ${state.downloadProgress}%
+                        </div>
+                        ${render10Segments(state.downloadProgress)}
+                      </div>
+                    `
+                    : `
+                      <div style="display:flex;gap:8px;margin-top:12px">
+                        ${
+                          localPkg
+                            ? `
+                              <button type="button" class="btn btn-primary" style="flex:1" data-action="open-course" data-slug="${escapeHtml(c.slug)}">
+                                ▶ Continuar Estudo
+                              </button>
+                              <button type="button" class="btn" title="Atualizar pacote" data-action="download-course" data-slug="${escapeHtml(c.slug)}">
+                                🔄
+                              </button>
+                            `
+                            : `
+                              <button type="button" class="btn btn-primary" style="flex:1" data-action="download-course" data-slug="${escapeHtml(c.slug)}">
+                                ⬇ Baixar Pacote (${formatBytes(c.stats && c.stats.estimatedSizeNoVideoBytes)})
+                              </button>
+                            `
+                        }
+                      </div>
+                    `
+                }
+              </div>
             </div>
           </article>
         `;
@@ -501,39 +531,44 @@
       .join("");
 
     return `
-      <section class="hero-banner">
-        <div style="max-width:740px">
-          <h1>🎒 MyLMS Pocket — Estude em Qualquer Lugar, Mesmo Sem Internet</h1>
+      <section class="mylms-hero">
+        <img src="/bg-hero-dark.png" alt="" class="mylms-hero-bg" />
+        <div class="mylms-hero-gradient"></div>
+        <div class="mylms-hero-content">
+          <div class="mylms-hero-kicker">
+            <span>📚 CONTINUE DE ONDE PAROU • MODO OFFLINE</span>
+          </div>
+          <h1>Estude seus cursos do MyLMS em qualquer lugar, mesmo sem internet</h1>
           <p>
-            Baixe seus cursos quando tiver Wi-Fi, estude no ônibus, metrô ou zona rural com <strong>correção instantânea no aparelho</strong> e sincronize seu progresso automaticamente com o <strong>MyLMS</strong>.
+            Baixe o pacote leve do curso quando tiver conexão, responda às atividades com <strong>correção instantânea no seu aparelho</strong> e sincronize automaticamente com a plataforma principal.
           </p>
           <div class="badge-row">
-            <span class="tag">⚡ PWA Offline-First (IndexedDB + CacheStorage)</span>
-            <span class="tag">🧠 Tutor IA Open-Source ≤10B (Llama-3.1-8B)</span>
-            <span class="tag">🔓 100% Open-Source (MIT)</span>
+            <span class="tag">⚡ PWA Offline-First (IndexedDB)</span>
+            <span class="tag">🧠 Tutor IA Open-Source ≤10B</span>
+            <span class="tag">🔓 Open-Source (MIT)</span>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:8px;min-width:210px">
-          <button type="button" class="btn btn-blue" data-action="toggle-sim-offline">
+        <div class="mylms-hero-actions">
+          <button type="button" class="btn btn-primary" data-action="toggle-sim-offline">
             ${state.simulatedOffline ? "🌐 Voltar para Modo Online" : "✈️ Testar em Modo Avião"}
           </button>
-          <button type="button" class="btn" data-action="import-json">
+          <button type="button" class="btn" style="background:rgba(28,28,28,0.85);color:#fff;border-color:rgba(255,255,255,0.2)" data-action="import-json">
             📂 Importar Pacote (.json)
           </button>
         </div>
       </section>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <h2 style="margin:0;font-size:17px">
-          📚 Cursos Disponíveis (${allCourses.length}) — Baixados no Aparelho (${state.downloadedPackages.length})
+      <div class="section-bar">
+        <h2>
+          <span style="color:var(--primary)">▍</span> Meus Cursos (${allCourses.length}) • Baixados no Aparelho (${state.downloadedPackages.length})
         </h2>
-        <span style="font-size:12px;color:#94a3b8">
-          Aluno conectado: <strong style="color:#f8fafc">${escapeHtml(state.studentEmail)}</strong>
+        <span style="font-size:12px;color:var(--muted-foreground)">
+          Aluno: <strong style="color:var(--foreground)">${escapeHtml(state.studentEmail)}</strong>
         </span>
       </div>
 
       <div class="grid-courses">
-        ${cardsHtml || '<div class="course-card"><p>Carregando catálogo de cursos...</p></div>'}
+        ${cardsHtml || '<div class="course-card"><div class="course-body"><p class="course-desc">Carregando catálogo de cursos do MyLMS...</p></div></div>'}
       </div>
     `;
   }
@@ -543,12 +578,14 @@
     if (!pkg) return renderCatalog();
     const { lesson, slide, slides } = getActiveLessonAndSlide();
     const doneIds = new Set(pkg.localProgress.completedLessonIds || []);
+    const slidePercent =
+      slides.length > 1 ? Math.round((state.activeSlideIndex / (slides.length - 1)) * 100) : 100;
 
     const sidebarModulesHtml = (pkg.bundle.modules || [])
       .map(
         (m, mIdx) => `
           <div style="margin-bottom:12px">
-            <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin:6px 4px">
+            <div class="module-title">
               Módulo ${mIdx + 1}: ${escapeHtml(m.title)}
             </div>
             ${(m.lessons || [])
@@ -562,10 +599,13 @@
                     data-action="select-lesson"
                     data-lesson="${escapeHtml(l.id)}"
                   >
-                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                      ${isDone ? "✅" : "📖"} ${escapeHtml(l.title)}
+                    <span class="lesson-icon-box ${isDone ? "done" : ""}">
+                      ${isDone ? "✓" : "📖"}
                     </span>
-                    <span style="font-size:11px;opacity:0.75">${(l.slides || []).length}s</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                      ${escapeHtml(l.title)}
+                    </span>
+                    <span style="font-size:11px;color:var(--muted-foreground)">${(l.slides || []).length}s</span>
                   </button>
                 `;
               })
@@ -577,14 +617,14 @@
 
     let slideBodyHtml = "";
     if (!slide) {
-      slideBodyHtml = `<p style="color:#94a3b8">Esta aula não possui slides cadastrados.</p>`;
+      slideBodyHtml = `<p style="color:var(--muted-foreground)">Esta aula não possui slides cadastrados.</p>`;
     } else if (slide.question) {
       const q = slide.question;
       const options = Array.isArray(q.possibleAnswers) ? q.possibleAnswers : [];
       slideBodyHtml = `
-        <div style="margin-bottom:12px">
-          <span class="tag" style="color:#38bdf8;margin-bottom:8px;display:inline-block">
-            📝 Questão Objetiva • Validação Local Offline
+        <div style="margin-bottom:16px">
+          <span class="tag" style="margin-bottom:10px;display:inline-block">
+            ❓ Questão Objetiva • Correção Local Offline
           </span>
           <div class="slide-content">${renderMarkdown(q.statement || slide.markdown || slide.title)}</div>
         </div>
@@ -610,22 +650,15 @@
                   data-action="toggle-option"
                   data-option="${escapeHtml(optStr)}"
                 >
-                  <strong style="min-width:22px">${String.fromCharCode(65 + idx)}.</strong>
-                  <span>${escapeHtml(optStr)}</span>
+                  <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1">
+                    <span class="option-letter">${String.fromCharCode(65 + idx)}</span>
+                    <span style="flex:1;word-break:break-word">${escapeHtml(optStr)}</span>
+                  </div>
+                  <span class="option-num">${idx + 1}</span>
                 </button>
               `;
             })
             .join("")}
-        </div>
-        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button
-            type="button"
-            class="btn btn-primary"
-            data-action="check-answer"
-            ${state.selectedOptions.length === 0 ? "disabled" : ""}
-          >
-            ✔️ Verificar Resposta no Aparelho (Offline)
-          </button>
         </div>
         ${
           state.questionResult
@@ -634,8 +667,8 @@
                 <strong>
                   ${
                     state.questionResult.isCorrect
-                      ? "🎉 Excelente! Resposta correta (+10 pts salvos na fila de sincronização)."
-                      : "💡 Quase lá! Veja a resposta esperada abaixo e tente novamente:"
+                      ? "✓ Resposta Correta! (+10 pts registrados na fila de sincronização)."
+                      : "✕ Resposta Incorreta. Confira o gabarito abaixo:"
                   }
                 </strong>
                 ${
@@ -650,14 +683,14 @@
       `;
     } else if (slide.flashcardFront || slide.flashcardBack) {
       slideBodyHtml = `
-        <div style="text-align:center;padding:24px 16px;background:#111c33;border:1px solid #334155;border-radius:14px">
-          <div style="font-size:11px;color:#38bdf8;margin-bottom:8px;font-weight:700">
+        <div style="text-align:center;padding:28px 18px;background:var(--surface-950);border:1px solid var(--border);border-radius:16px">
+          <div style="font-size:11px;color:var(--primary);margin-bottom:8px;font-weight:800">
             🃏 FLASHCARD INTERATIVO (${state.flashcardFlipped ? "VERSO" : "FRENTE"})
           </div>
-          <div style="font-size:17px;font-weight:700;margin-bottom:16px">
+          <div style="font-size:18px;font-weight:700;margin-bottom:18px">
             ${escapeHtml(state.flashcardFlipped ? slide.flashcardBack : slide.flashcardFront)}
           </div>
-          <button type="button" class="btn btn-blue" data-action="flip-flashcard">
+          <button type="button" class="btn btn-primary" data-action="flip-flashcard">
             🔄 Virar Cartão
           </button>
         </div>
@@ -670,68 +703,107 @@
       `;
     }
 
+    const isQuestionSlide = Boolean(slide && slide.question);
+    const needVerifyQuestion = isQuestionSlide && !state.questionResult;
+
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-        <button type="button" class="btn" data-action="back-catalog">
-          ← Voltar ao Catálogo
-        </button>
-        <div style="font-size:12px;color:#34d399;font-weight:600">
-          📦 Pacote Ativo no IndexedDB • Hash #${escapeHtml(pkg.bundle.course.versionHash || "v1")}
+      <!-- Header do AVA idêntico ao ContentLesson do MyLMS -->
+      <div class="ava-header-bar">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0">
+          <button type="button" class="ava-exit-btn" data-action="back-catalog">
+            <span class="ava-exit-icon">↖</span>
+            <span>Sair da atividade</span>
+          </button>
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              ${escapeHtml(pkg.bundle.course.title)}
+            </div>
+            <div style="font-size:11px;color:var(--muted-foreground)">
+              ${escapeHtml(lesson ? lesson.title : "")}
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px">
+          ${render10Segments(slidePercent)}
+          <span style="font-size:13px;font-weight:800">${slidePercent}%</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--primary);background:var(--surface-950);padding:6px 12px;border-radius:999px">
+            Slide ${slides.length ? state.activeSlideIndex + 1 : 0}/${slides.length}
+          </span>
         </div>
       </div>
 
       <div class="player-shell">
-        <aside class="sidebar-card">
-          <h2 style="margin:0 0 10px;font-size:15px">${escapeHtml(pkg.bundle.course.title)}</h2>
-          ${sidebarModulesHtml}
-        </aside>
-
-        <section class="slide-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #1e293b;padding-bottom:12px;margin-bottom:14px;flex-wrap:wrap">
-            <div>
-              <div style="font-size:11px;color:#94a3b8">${escapeHtml(lesson ? lesson.title : "")}</div>
-              <h1 style="margin:2px 0 0;font-size:18px">${escapeHtml(slide ? slide.title : "Aula")}</h1>
+        <div class="ava-main-col">
+          <!-- Container principal do slide com fundo dots.png igual ao MyLMS -->
+          <section class="slide-card">
+            <div class="slide-dots-bg"></div>
+            <div class="slide-inner">
+              <h1 style="margin:0 0 16px;font-size:22px;font-weight:800">
+                ${escapeHtml(slide ? slide.title : "Aula")}
+              </h1>
+              ${slideBodyHtml}
             </div>
-            <span class="tag">
-              Slide ${slides.length ? state.activeSlideIndex + 1 : 0} de ${slides.length}
-            </span>
-          </div>
+          </section>
 
-          ${slideBodyHtml}
-
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid #1e293b;flex-wrap:wrap">
+          <!-- Barra inferior do AVA (Anterior / Pular / Confirmar / Seguinte) -->
+          <div class="ava-bottom-bar">
             <button
               type="button"
-              class="btn"
+              class="btn btn-ghost-brand"
               data-action="prev-slide"
               ${state.activeSlideIndex <= 0 ? "disabled" : ""}
             >
-              ← Slide Anterior
+              Anterior
             </button>
 
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:10px">
               ${
-                state.activeSlideIndex < slides.length - 1
+                isQuestionSlide && state.activeSlideIndex < slides.length - 1
+                  ? `
+                    <button type="button" class="btn btn-ghost-brand" data-action="next-slide">
+                      Pular
+                    </button>
+                  `
+                  : ""
+              }
+              ${
+                needVerifyQuestion
+                  ? `
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      data-action="check-answer"
+                      ${state.selectedOptions.length === 0 ? "disabled" : ""}
+                    >
+                      Confirmar
+                    </button>
+                  `
+                  : state.activeSlideIndex < slides.length - 1
                   ? `
                     <button type="button" class="btn btn-primary" data-action="next-slide">
-                      Próximo Slide →
+                      Seguinte
                     </button>
                   `
                   : `
                     <button type="button" class="btn btn-primary" data-action="complete-lesson">
-                      ✅ Concluir Aula &amp; Salvar no Sync
+                      Concluir
                     </button>
                   `
               }
             </div>
           </div>
 
+          <!-- Tutor IA Open-Source <=10B -->
           <div class="tutor-box">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-              <strong style="font-size:13px;color:#6ee7b7">
-                🤖 Tutor Pedagógico Open-Source (Llama-3.1-8B • ≤10B)
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <strong style="font-size:13px;color:var(--primary)">
+                ✨ Copilot MyLMS Pocket • Tutor IA Open-Source (Llama-3.1-8B • ≤10B)
               </strong>
-              <span style="font-size:11px;color:#94a3b8">Mozilla Human-Scale AI Ready</span>
+              <span style="font-size:11px;color:var(--muted-foreground)">Human-Scale AI • Offline Ready</span>
             </div>
             <div id="tutorHistory">
               ${state.tutorMessages
@@ -739,29 +811,40 @@
                   (m) => `
                     <div class="chat-msg ${m.role === "user" ? "chat-user" : "chat-ai"}">
                       <div>${renderMarkdown(m.content)}</div>
-                      ${m.meta ? `<div style="font-size:10px;color:#94a3b8;margin-top:4px">${escapeHtml(m.meta)}</div>` : ""}
+                      ${m.meta ? `<div style="font-size:10px;color:var(--muted-foreground);margin-top:4px">${escapeHtml(m.meta)}</div>` : ""}
                     </div>
                   `
                 )
                 .join("")}
-              ${state.tutorLoading ? `<div class="chat-msg chat-ai">⏳ Consultando SLM ≤10B...</div>` : ""}
+              ${state.tutorLoading ? `<div class="chat-msg chat-ai">⏳ Consultando Tutor SLM ≤10B...</div>` : ""}
             </div>
             <form id="tutorForm" style="display:flex;gap:8px;margin-top:8px">
               <input
                 id="tutorInput"
                 type="text"
                 placeholder="Tire uma dúvida sobre este slide..."
-                style="flex:1;min-width:0;padding:9px 12px;border-radius:10px;border:1px solid #334155;background:#070b14;color:#f8fafc;font-size:13px"
+                class="mylms-input"
+                style="flex:1;min-width:0"
               />
-              <button type="submit" class="btn btn-blue">Perguntar</button>
+              <button type="submit" class="btn btn-primary">Perguntar</button>
             </form>
           </div>
-        </section>
+        </div>
+
+        <!-- Sidebar Direita de Módulos e Aulas (Estilo LessonsAside do MyLMS) -->
+        <aside class="sidebar-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <strong style="font-size:14px">Conteúdo do Curso</strong>
+            <span style="font-size:11px;color:var(--primary);font-weight:700">Offline Ativo</span>
+          </div>
+          ${sidebarModulesHtml}
+        </aside>
       </div>
     `;
   }
 
   function render() {
+    applyTheme();
     updateHeaderUi();
     const root = document.getElementById("appRoot");
     if (!root) return;
@@ -860,7 +943,7 @@
       completeCurrentLesson();
     } else if (action === "toggle-sim-offline") {
       state.simulatedOffline = !state.simulatedOffline;
-      if ( isEffectivelyOnline() ) syncNow(true);
+      if (isEffectivelyOnline()) syncNow(true);
       render();
     } else if (action === "import-json") {
       const fileIn = document.getElementById("fileImportInput");
@@ -869,6 +952,8 @@
   });
 
   window.addEventListener("DOMContentLoaded", async () => {
+    applyTheme();
+
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
@@ -890,6 +975,12 @@
         }
       });
     }
+
+    document.getElementById("btnThemeToggle")?.addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      localStorage.setItem("mylms_pocket_theme", state.theme);
+      applyTheme();
+    });
 
     document.getElementById("btnMobileMenu")?.addEventListener("click", () => {
       const drawer = document.getElementById("mobileDrawer");

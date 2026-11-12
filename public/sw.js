@@ -1,21 +1,23 @@
-const SHELL_CACHE = "mylms-pocket-shell-v1";
-const MEDIA_CACHE = "mylms-pocket-media-v1";
-
+const CACHE_NAME = "mylms-pocket-shell-v2";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
-  "/app.js",
   "/styles.css",
+  "/app.js",
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
-  "/favicon-gled.png",
+  "/logo-mylms-dark.png",
+  "/logo-mylms-light.png",
+  "/favicon-mylms-dark.png",
+  "/bg-hero-dark.png",
+  "/dots.png",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
-      .open(SHELL_CACHE)
+      .open(CACHE_NAME)
       .then((cache) => cache.addAll(SHELL_ASSETS))
       .then(() => self.skipWaiting())
   );
@@ -28,7 +30,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k !== SHELL_CACHE && k !== MEDIA_CACHE)
+            .filter((k) => k.startsWith("mylms-pocket-shell-") && k !== CACHE_NAME)
             .map((k) => caches.delete(k))
         )
       )
@@ -37,57 +39,60 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  if (request.method !== "GET") return;
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
 
-  const url = new URL(request.url);
-
-  // Never cache live API / sync / auth endpoints in the Service Worker
-  if (
-    url.pathname.startsWith("/v1/") ||
-    url.pathname.startsWith("/auth/") ||
-    url.pathname.startsWith("/api/")
-  ) {
-    return;
-  }
-
-  // Media assets (cached course images, audio, video): Cache-First
-  if (
-    url.pathname.match(/\.(png|jpe?g|gif|webp|svg|mp3|wav|ogg|m4a|mp4|webm)$/i) &&
-    !SHELL_ASSETS.includes(url.pathname)
-  ) {
+  if (req.mode === "navigate") {
     event.respondWith(
-      caches.open(MEDIA_CACHE).then(async (cache) => {
-        const cached = await cache.match(request, { ignoreSearch: false });
-        if (cached) return cached;
-        try {
-          const netRes = await fetch(request);
-          if (netRes && (netRes.status === 200 || netRes.type === "opaque")) {
-            cache.put(request, netRes.clone()).catch(() => {});
-          }
-          return netRes;
-        } catch {
-          return new Response("", { status: 504, statusText: "Offline media unavailable" });
-        }
-      })
+      fetch(req)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put("/index.html", clone)).catch(() => {});
+          return res;
+        })
+        .catch(async () => {
+          const cached = await caches.match("/index.html");
+          return cached || caches.match("/");
+        })
     );
     return;
   }
 
-  // App shell navigation & assets: Cache-First with network update in background
-  event.respondWith(
-    caches.open(SHELL_CACHE).then(async (cache) => {
-      const cached = await cache.match(request.mode === "navigate" ? "/index.html" : request);
-      const fetchPromise = fetch(request)
+  if (url.pathname.startsWith("/api/")) {
+    event.respondWith(
+      fetch(req)
         .then((res) => {
-          if (res && res.status === 200) {
-            cache.put(request.mode === "navigate" ? "/index.html" : request, res.clone()).catch(() => {});
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, clone)).catch(() => {});
           }
           return res;
         })
-        .catch(() => cached);
+        .catch(async () => {
+          const cached = await caches.match(req);
+          if (cached) return cached;
+          return new Response(JSON.stringify({ offline: true, items: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        })
+    );
+    return;
+  }
 
-      return cached || fetchPromise;
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const fetched = fetch(req)
+        .then((netRes) => {
+          if (netRes && (netRes.status === 200 || netRes.type === "opaque")) {
+            const clone = netRes.clone();
+            caches.open("mylms-pocket-media-v1").then((c) => c.put(req, clone)).catch(() => {});
+          }
+          return netRes;
+        })
+        .catch(() => cached);
+      return cached || fetched;
     })
   );
 });
