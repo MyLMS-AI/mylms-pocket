@@ -1336,18 +1336,21 @@
                   const cleanDesc = (course.description || "Conteúdo interativo com aulas, atividades práticas e tutor IA.")
                     .replace(/<[^>]*>/g, "")
                     .trim();
+                  const thumbUrl = course.thumbnailUrl || course.image || (savedPkg && savedPkg.course && (savedPkg.course.thumbnailUrl || savedPkg.course.image)) || "";
+                  const modulesCount = (course.stats && course.stats.modulesCount) || course.modulesCount || (savedPkg && (savedPkg.modules || []).length) || 1;
+                  const lessonsCount = (course.stats && course.stats.lessonsCount) || course.lessonsCount || (savedPkg && flattenLessons(savedPkg).length) || 0;
 
                   return `
                     <article class="course-card">
                       <div class="course-thumb" ${savedPkg ? `data-open-dashboard="${escapeHtml(course.slug)}" style="cursor:pointer"` : ""}>
                         ${
-                          course.thumbnailUrl
-                            ? `<img src="${escapeHtml(course.thumbnailUrl)}" alt="${escapeHtml(course.title)}" loading="lazy" />`
-                            : ""
+                          thumbUrl
+                            ? `<img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(course.title)}" loading="lazy" />`
+                            : `<div class="course-thumb-placeholder"><span>MyLMS</span></div>`
                         }
                         <div class="course-thumb-badges">
                           <span class="pill ${savedPkg ? "pill-cached" : "pill-online"}">
-                            ${savedPkg ? "✓ Salvo no Aparelho" : `${course.lessonsCount || 0} aulas`}
+                            ${savedPkg ? "✓ Salvo no Aparelho" : `${lessonsCount} aulas`}
                           </span>
                           ${
                             savedPkg && prog
@@ -1362,8 +1365,8 @@
                         <p class="course-desc">${escapeHtml(cleanDesc)}</p>
 
                         <div class="course-meta">
-                          <span>📦 ${course.modulesCount || 1} módulo(s)</span>
-                          <span>📖 ${course.lessonsCount || 0} aula(s)</span>
+                          <span>📦 ${modulesCount} módulo(s)</span>
+                          <span>📖 ${lessonsCount} aula(s)</span>
                         </div>
 
                         ${
@@ -1710,7 +1713,7 @@
                           </span>
                         </div>
                         <div style="font-size:12px;color:var(--muted-foreground);margin-top:4px">
-                          Slug: <code>${escapeHtml(c.slug)}</code> • ${c.modulesCount || 0} módulo(s) • ${c.lessonsCount || 0} aula(s) • ${c.slidesCount || 0} slides
+                          Slug: <code>${escapeHtml(c.slug)}</code> • ${(c.stats && c.stats.modulesCount) ?? c.modulesCount ?? 0} módulo(s) • ${(c.stats && c.stats.lessonsCount) ?? c.lessonsCount ?? 0} aula(s) • ${(c.stats && c.stats.slidesCount) ?? c.slidesCount ?? 0} slides
                         </div>
                       </div>
                       <div style="display:flex;align-items:center;gap:8px">
