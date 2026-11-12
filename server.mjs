@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "public");
 const PORT = Number(process.env.PORT || 3090);
-const UPSTREAM_API = (process.env.MYLMS_API_URL || "https://plataforma.mylms.ai").replace(/\/$/, "");
+const UPSTREAM_API = (process.env.MYLMS_API_URL || "https://plataforma.mylms.ai/api").replace(/\/$/, "");
+const UPSTREAM_ORIGIN = new URL(UPSTREAM_API).origin;
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -27,6 +28,16 @@ async function readBodyBuffer(req) {
   return Buffer.concat(chunks);
 }
 
+function rewriteSetCookieForHost(rawCookies) {
+  if (!rawCookies) return undefined;
+  const list = Array.isArray(rawCookies) ? rawCookies : [rawCookies];
+  return list.map((cookieStr) =>
+    String(cookieStr)
+      .replace(/;\s*Domain=[^;]+/gi, "")
+      .replace(/;\s*SameSite=None/gi, "; SameSite=Lax")
+  );
+}
+
 const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
@@ -42,14 +53,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Proxy /api/auth/* to MyLMS BetterAuth (/api/auth/* on UPSTREAM_API)
+  // Proxy /api/auth/* to MyLMS BetterAuth (/auth/secure/* on UPSTREAM_API)
   if (reqUrl.pathname.startsWith("/api/auth/")) {
-    const targetUrl = `${UPSTREAM_API}${reqUrl.pathname}${reqUrl.search}`;
+    let subPath = reqUrl.pathname.replace(/^\/api\/auth/, "");
+    if (!subPath.startsWith("/secure/")) {
+      subPath = "/secure" + (subPath.startsWith("/") ? subPath : "/" + subPath);
+    }
+    const targetUrl = `${UPSTREAM_API}/auth${subPath}${reqUrl.search}`;
     try {
       const bodyBuffer = await readBodyBuffer(req);
       const headers = {
         Accept: "application/json",
-        Origin: UPSTREAM_API,
+        Origin: UPSTREAM_ORIGIN,
       };
       if (req.headers["content-type"]) {
         headers["Content-Type"] = req.headers["content-type"];
@@ -72,11 +87,12 @@ const server = http.createServer(async (req, res) => {
         "Content-Type": upstreamRes.headers.get("content-type") || "application/json; charset=utf-8",
         "Cache-Control": "no-store",
       };
-      const setCookie = upstreamRes.headers.getSetCookie
+      const rawCookies = upstreamRes.headers.getSetCookie
         ? upstreamRes.headers.getSetCookie()
         : upstreamRes.headers.get("set-cookie");
-      if (setCookie && (!Array.isArray(setCookie) || setCookie.length > 0)) {
-        outHeaders["Set-Cookie"] = setCookie;
+      const rewrittenCookies = rewriteSetCookieForHost(rawCookies);
+      if (rewrittenCookies && rewrittenCookies.length > 0) {
+        outHeaders["Set-Cookie"] = rewrittenCookies;
       }
 
       res.writeHead(upstreamRes.status, outHeaders);
@@ -103,7 +119,7 @@ const server = http.createServer(async (req, res) => {
 
       const headers = {
         Accept: "application/json",
-        Origin: UPSTREAM_API,
+        Origin: UPSTREAM_ORIGIN,
       };
       if (req.headers["content-type"]) {
         headers["Content-Type"] = req.headers["content-type"];
