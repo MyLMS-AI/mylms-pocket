@@ -19,6 +19,14 @@ const MIME_TYPES = {
   ".ico": "image/x-icon",
 };
 
+async function readBodyBuffer(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
@@ -28,11 +36,60 @@ const server = http.createServer(async (req, res) => {
       JSON.stringify({
         status: "ok",
         service: "mylms-pocket",
-        architecture: "offline-first-pwa",
-        slmScale: "<=10B (Llama-3.1-8B-Instruct)",
         upstream: UPSTREAM_API,
       })
     );
+    return;
+  }
+
+  // Proxy /api/auth/* to MyLMS BetterAuth (/api/auth/* on UPSTREAM_API)
+  if (reqUrl.pathname.startsWith("/api/auth/")) {
+    const targetUrl = `${UPSTREAM_API}${reqUrl.pathname}${reqUrl.search}`;
+    try {
+      const bodyBuffer = await readBodyBuffer(req);
+      const headers = {
+        Accept: "application/json",
+        Origin: UPSTREAM_API,
+      };
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+      if (req.headers["cookie"]) {
+        headers["Cookie"] = req.headers["cookie"];
+      }
+      if (req.headers["authorization"]) {
+        headers["Authorization"] = req.headers["authorization"];
+      }
+
+      const upstreamRes = await fetch(targetUrl, {
+        method: req.method || "GET",
+        headers,
+        body: ["GET", "HEAD"].includes(req.method || "GET") ? undefined : bodyBuffer,
+      });
+
+      const responseBytes = Buffer.from(await upstreamRes.arrayBuffer());
+      const outHeaders = {
+        "Content-Type": upstreamRes.headers.get("content-type") || "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      };
+      const setCookie = upstreamRes.headers.getSetCookie
+        ? upstreamRes.headers.getSetCookie()
+        : upstreamRes.headers.get("set-cookie");
+      if (setCookie && (!Array.isArray(setCookie) || setCookie.length > 0)) {
+        outHeaders["Set-Cookie"] = setCookie;
+      }
+
+      res.writeHead(upstreamRes.status, outHeaders);
+      res.end(responseBytes);
+    } catch (err) {
+      res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(
+        JSON.stringify({
+          error: "Falha ao comunicar com autenticação do MyLMS",
+          detail: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
     return;
   }
 
@@ -42,14 +99,11 @@ const server = http.createServer(async (req, res) => {
     const targetUrl = `${UPSTREAM_API}${upstreamPath}`;
 
     try {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      const bodyBuffer = Buffer.concat(chunks);
+      const bodyBuffer = await readBodyBuffer(req);
 
       const headers = {
         Accept: "application/json",
+        Origin: UPSTREAM_API,
       };
       if (req.headers["content-type"]) {
         headers["Content-Type"] = req.headers["content-type"];
@@ -111,5 +165,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[MyLMS Pocket] Offline-First PWA listening on http://0.0.0.0:${PORT} (upstream: ${UPSTREAM_API})`);
+  console.log(`[MyLMS Pocket] Listening on http://0.0.0.0:${PORT} (upstream: ${UPSTREAM_API})`);
 });

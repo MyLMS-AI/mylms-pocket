@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
-  <title>MyLMS Pocket — Player Offline-First Open-Source</title>
-  <meta name="description" content="Player educacional Open-Source Offline-First do MyLMS para estudo sem internet com sincronização inteligente e Tutor IA Local (<=10B)." />
+  <title>MyLMS Pocket — Seus Cursos Offline</title>
+  <meta name="description" content="Estude seus cursos do MyLMS em qualquer lugar, mesmo sem conexão com a internet." />
   <meta name="theme-color" content="#f8f7f5" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -29,27 +29,30 @@
       >
         ☰
       </button>
-      <div class="brand-link">
+      <a href="/" class="brand-link" id="brandHomeLink">
         <img src="/logo-mylms-dark.png" alt="MyLMS" class="brand-logo" />
         <div class="brand-text">
           <div class="brand-title">
             MyLMS <span class="brand-badge">POCKET</span>
           </div>
-          <span class="brand-sub">AVA Offline-First • SLM ≤10B</span>
+          <span class="brand-sub">Estudo Offline</span>
         </div>
-      </div>
+      </a>
     </div>
 
     <div class="topbar-actions">
       <span id="netStatusPill" class="pill pill-online">● Online</span>
-      <button id="btnSyncNow" type="button" class="btn btn-sync" title="Sincronizar progresso com o MyLMS">
+      <button id="btnSyncNow" type="button" class="btn btn-sync" title="Sincronizar seu progresso com o MyLMS">
         🔄 Sync (<span id="syncQueueCount">0</span>)
+      </button>
+      <button id="btnAuthHeader" type="button" class="btn" title="Sua conta MyLMS">
+        👤 Entrar
       </button>
       <button id="btnThemeToggle" type="button" class="btn btn-icon" aria-label="Alternar tema Claro/Escuro" title="Alternar tema Claro/Escuro">
         🌙
       </button>
       <button id="btnInstallPwa" type="button" class="btn btn-primary" style="display:none">
-        📲 Instalar
+        📲 Instalar App
       </button>
     </div>
   </header>
@@ -61,47 +64,44 @@
         <img src="/logo-mylms-dark.png" alt="MyLMS" class="brand-logo" />
         <div>
           <strong style="font-size:14px;display:block">MyLMS Pocket</strong>
-          <span style="font-size:11px;color:var(--muted-foreground)">AVA Offline-First</span>
+          <span style="font-size:11px;color:var(--muted-foreground)">Meus Cursos Offline</span>
         </div>
       </div>
       <button id="btnCloseDrawer" type="button" class="btn btn-icon" aria-label="Fechar menu">✕</button>
     </div>
 
-    <p class="drawer-desc">
-      Ambiente Virtual de Aprendizagem Offline-First com banco local (<code>IndexedDB</code> + <code>CacheStorage</code>) e Tutor IA em escala humana (<code>Llama-3.1-8B ≤10B</code>).
-    </p>
-
     <div class="drawer-nav">
       <button id="navCatalogBtn" type="button" class="btn drawer-btn">
-        📚 Meus Cursos &amp; Pacotes Offline
+        📚 Início &amp; Meus Cursos
+      </button>
+      <button id="navDownloadedBtn" type="button" class="btn drawer-btn">
+        📲 Baixados no Aparelho
+      </button>
+      <button id="navAdminCurationBtn" type="button" class="btn drawer-btn" style="display:none">
+        ⚙️ Curadoria de Cursos (Admin)
       </button>
       <button id="navImportBtn" type="button" class="btn drawer-btn">
-        📂 Importar Pacote (.mylms-pocket.json)
+        📂 Importar Curso (.json)
       </button>
       <button id="navSimOfflineBtn" type="button" class="btn drawer-btn">
-        ✈️ Simular Modo Avião (Teste Offline)
+        ✈️ Testar Modo Sem Internet
       </button>
       <a href="https://plataforma.mylms.ai" target="_blank" rel="noreferrer" class="btn drawer-btn">
-        🌐 Abrir Plataforma MyLMS Completa
+        🌐 Ir para Plataforma MyLMS
       </a>
     </div>
 
-    <div class="drawer-account">
-      <div class="drawer-section-label">CONTA SINCRONIZADA MYLMS</div>
-      <input
-        id="studentEmailInput"
-        type="email"
-        placeholder="E-mail do aluno (ex: andre@glededu.com)"
-        value="andre@glededu.com"
-        class="mylms-input"
-      />
-      <button id="btnSaveEmail" type="button" class="btn btn-primary" style="width:100%;margin-top:8px">
-        Salvar Conta do Aluno
-      </button>
-    </div>
-
+    <div id="drawerAuthCard" class="drawer-account"></div>
     <div id="drawerLessonsContainer" style="margin-top:16px"></div>
   </aside>
+
+  <!-- Modal Oficial de Login MyLMS (E-mail + Código OTP) -->
+  <div id="authModalOverlay" class="auth-modal-overlay" aria-hidden="true">
+    <div class="auth-modal-card" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+      <button id="btnCloseAuthModal" type="button" class="auth-modal-close" aria-label="Fechar">✕</button>
+      <div id="authModalBody"></div>
+    </div>
+  </div>
 
   <input id="fileImportInput" type="file" accept=".json,application/json" style="display:none" />
 
