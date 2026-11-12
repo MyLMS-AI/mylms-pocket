@@ -1,0 +1,24 @@
+{
+  "name": "mylms-pocket",
+  "version": "1.0.0",
+  "description": "MyLMS Pocket — Open-Source Offline-First Educational Player with Local SLM (<=10B) & Mother-DB Sync",
+  "license": "MIT",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MyLMS-AI/mylms-pocket.git"
+  },
+  "keywords": [
+    "offline-first",
+    "pwa",
+    "education",
+    "lms",
+    "small-language-model",
+    "human-scale-ai",
+    "indexeddb"
+  ]
+}

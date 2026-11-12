@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>MyLMS Pocket — Player Offline-First Open-Source</title>
+  <meta name="description" content="Player educacional Open-Source Offline-First para estudo sem internet com sincronização inteligente e Tutor IA Local (<=10B)." />
+  <meta name="theme-color" content="#10b981" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-wrap">
+      <button
+        id="btnMobileMenu"
+        type="button"
+        aria-controls="mobileDrawer"
+        aria-expanded="false"
+        aria-label="Abrir menu de navegação"
+        class="btn"
+        style="padding:6px 10px"
+      >
+        ☰
+      </button>
+      <img src="/icon-192.png" alt="MyLMS Pocket" class="brand-logo" />
+      <div style="min-width:0">
+        <div class="brand-title">MyLMS Pocket</div>
+        <span class="brand-sub">Offline-First • Open-Source • SLM ≤10B</span>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <span id="netStatusPill" class="pill pill-online">● Online</span>
+      <button id="btnSyncNow" type="button" class="btn btn-amber" title="Sincronizar progresso com o banco-mãe">
+        🔄 Sync (<span id="syncQueueCount">0</span>)
+      </button>
+      <button id="btnInstallPwa" type="button" class="btn btn-primary" style="display:none">
+        📲 Instalar App
+      </button>
+    </div>
+  </header>
+
+  <div id="drawerOverlay" class="drawer-overlay"></div>
+  <aside id="mobileDrawer" class="mobile-drawer" aria-label="Menu Principal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <strong style="font-size:15px">🎒 MyLMS Pocket</strong>
+      <button id="btnCloseDrawer" type="button" class="btn" aria-label="Fechar menu">✕</button>
+    </div>
+    <p style="font-size:12px;color:#94a3b8;margin:0 0 14px;line-height:1.4">
+      Player Open-Source para estudo sem internet com banco local (<code>IndexedDB</code> + <code>CacheStorage</code>) e Tutor IA em escala humana (<code>Llama-3.1-8B ≤10B</code>).
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <button id="navCatalogBtn" type="button" class="btn" style="justify-content:flex-start">
+        📚 Catálogo &amp; Pacotes Offline
+      </button>
+      <button id="navImportBtn" type="button" class="btn" style="justify-content:flex-start">
+        📂 Importar Arquivo .mylms-pocket.json
+      </button>
+      <button id="navSimOfflineBtn" type="button" class="btn" style="justify-content:flex-start">
+        ✈️ Simular Modo Avião (Teste Offline)
+      </button>
+      <a href="https://plataforma.mylms.ai" target="_blank" rel="noreferrer" class="btn" style="justify-content:flex-start">
+        🌐 Abrir MyLMS Principal
+      </a>
+    </div>
+    <div style="border-top:1px solid #334155;padding-top:12px">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px">CONTA SINCRONIZADA</div>
+      <input
+        id="studentEmailInput"
+        type="email"
+        placeholder="E-mail do aluno (ex: andre@glededu.com)"
+        value="andre@glededu.com"
+        style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid #334155;background:#070b14;color:#f8fafc;font-size:12px;margin-bottom:8px"
+      />
+      <button id="btnSaveEmail" type="button" class="btn btn-primary" style="width:100%">
+        Salvar Identificação
+      </button>
+    </div>
+    <div id="drawerLessonsContainer" style="margin-top:16px"></div>
+  </aside>
+
+  <input id="fileImportInput" type="file" accept=".json,application/json" style="display:none" />
+
+  <main id="appRoot" class="container"></main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
