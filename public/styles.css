@@ -1364,3 +1364,10 @@ html:not(.dark) .module-badge-idx {
     white-space: nowrap;
   }
 }
+
+.topbar .brand-link,
+.topbar button,
+.topbar a {
+  min-height: 36px;
+  min-width: 36px;
+}
