@@ -975,7 +975,8 @@
 
   function localSmallestTutorFallback(question, pkg, lesson, slide) {
     const q = (question || "").toLowerCase();
-    const slideText = (slide && slide.content ? slide.content : "").replace(/[#*_`>-]/g, "").trim();
+    const rawSlideMd = (slide && (slide.markdown || slide.content)) || (slide && slide.question && (slide.question.statement || slide.question.stem)) || "";
+    const slideText = rawSlideMd.replace(/[#*_`>-]/g, "").trim();
     const sentences = slideText
       .split(/(?<=[.!?])\s+/)
       .map((s) => s.trim())
@@ -999,7 +1000,7 @@
     if (slide && slide.question && slide.question.explanation) {
       reply += `💡 **Dica da Atividade:** ${slide.question.explanation}`;
     } else {
-      reply += `💡 **Dica de Estudo:** Releia os pontos destacados acima e avance para a atividade prática para fixar o conteúdo.`;
+      reply += `💡 **Dica de Estudo:** Releia os exemplos em destaque e pratique nas atividades interativas desta aula.`;
     }
     return reply;
   }
@@ -1014,6 +1015,7 @@
     const lesson = lessons[state.activeLessonIdx] || lessons[0];
     const slides = (lesson && lesson.slides) || [];
     const slide = slides[state.activeSlideIdx] || slides[0];
+    const slideBodyText = (slide && (slide.markdown || slide.content)) || (slide && slide.question && (slide.question.statement || slide.question.stem)) || "";
 
     state.tutorMessages.push({ role: "user", text: q });
     state.tutorLoading = true;
@@ -1039,7 +1041,7 @@
           question: q,
           courseTitle: pkg.course.title,
           lessonTitle: lesson ? lesson.title : "",
-          slideContent: slide ? slide.content : "",
+          slideContent: slideBodyText,
         }),
       });
       if (!res.ok) throw new Error("Offline tutor fallback");
@@ -1813,56 +1815,157 @@
     }));
 
     let questionBlockHtml = "";
-    if (slide.question && Array.isArray(slide.question.options) && slide.question.options.length > 0) {
-      const q = slide.question;
+    const q = slide.question;
+    const rawOptions = q ? q.possibleAnswers || q.options || [] : [];
+    const rawCorrectList = q
+      ? Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0
+        ? q.correctAnswers
+        : q.correctAnswer
+        ? [q.correctAnswer]
+        : []
+      : [];
+    const qStatement = q ? q.statement || q.stem || "" : "";
+    const qAudioUrl = q && q.payload && q.payload.audio_file ? q.payload.audio_file : null;
+    const qType = q && q.type ? String(q.type).toUpperCase() : "UNIQUE_CHOICE";
+    const isMultiWordType =
+      qType === "PRONUNCIATION_ASSESSMENT" ||
+      qType === "FILL_IN_THE_BLANKS" ||
+      qType === "WORD_ORDER" ||
+      rawCorrectList.length > 1;
+
+    if (q && (rawOptions.length > 0 || qStatement)) {
+      const targetAnswerStr = isMultiWordType ? rawCorrectList.join(" ") : rawCorrectList[0] || "";
+      const selectedWords = Array.isArray(state.selectedOption)
+        ? state.selectedOption
+        : state.selectedOption
+        ? [state.selectedOption]
+        : [];
+
       questionBlockHtml = `
-        <div class="question-box">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--brand-color);margin-bottom:6px">
-            🎯 Atividade Prática
+        <div class="question-box" style="${!(slide.markdown || slide.content) ? "margin-top:4px" : ""}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--brand-color)">
+              🎯 ${
+                qType === "PRONUNCIATION_ASSESSMENT"
+                  ? " escuta & prática de frase"
+                  : qType === "FILL_IN_THE_BLANKS"
+                  ? "complete as lacunas"
+                  : qType === "TRUE_FALSE"
+                  ? "verdadeiro ou falso"
+                  : "atividade interativa"
+              }
+            </span>
           </div>
-          <h4>${escapeHtml(q.stem)}</h4>
-          <div>
-            ${q.options
-              .map((opt, idx) => {
-                const optStr = typeof opt === "string" ? opt : opt.text || opt.label || JSON.stringify(opt);
-                let cls = "option-btn";
-                if (state.selectedOption === optStr) cls += " selected";
-                if (state.questionResult) {
-                  if (optStr === q.correctAnswer) cls += " correct";
-                  else if (state.selectedOption === optStr && !state.questionResult.correct) cls += " wrong";
-                }
-                return `
-                  <button
-                    type="button"
-                    class="${cls}"
-                    data-option="${escapeHtml(optStr)}"
-                  >
-                    <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1">
-                      <span class="option-letter">${String.fromCharCode(65 + idx)}</span>
-                      <span style="flex:1;word-break:break-word">${escapeHtml(optStr)}</span>
-                    </div>
-                    <span class="option-num">${idx + 1}</span>
-                  </button>
-                `;
-              })
-              .join("")}
-          </div>
+
+          ${
+            qAudioUrl
+              ? `
+                <div style="margin-bottom:14px;padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--border)">
+                  <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--muted-foreground)">🔊 Ouça o áudio da atividade:</div>
+                  <audio controls preload="metadata" src="${escapeHtml(qAudioUrl)}" style="width:100%;height:38px"></audio>
+                </div>
+              `
+              : ""
+          }
+
+          <h4>${escapeHtml(qStatement)}</h4>
+
+          ${
+            isMultiWordType
+              ? `
+                <div style="margin-bottom:12px;padding:12px 14px;min-height:48px;border-radius:12px;background:var(--card);border:1px dashed var(--primary);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                  <div style="font-size:15px;font-weight:700;color:var(--foreground)">
+                    ${
+                      selectedWords.length > 0
+                        ? escapeHtml(selectedWords.join(" "))
+                        : `<span style="color:var(--muted-foreground);font-weight:500;font-size:13px">Toque nas palavras abaixo na ordem correta...</span>`
+                    }
+                  </div>
+                  ${
+                    selectedWords.length > 0
+                      ? `<button type="button" class="btn btn-sm" id="btnClearWords">Limpar</button>`
+                      : ""
+                  }
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  ${rawOptions
+                    .map((opt, idx) => {
+                      const optStr = typeof opt === "string" ? opt : opt.text || opt.label || JSON.stringify(opt);
+                      return `
+                        <button
+                          type="button"
+                          class="btn"
+                          data-word-chip="${escapeHtml(optStr)}"
+                          data-word-idx="${idx}"
+                          style="font-weight:700"
+                        >
+                          ${escapeHtml(optStr)}
+                        </button>
+                      `;
+                    })
+                    .join("")}
+                </div>
+              `
+              : `
+                <div>
+                  ${rawOptions
+                    .map((opt, idx) => {
+                      const optStr = typeof opt === "string" ? opt : opt.text || opt.label || JSON.stringify(opt);
+                      let cls = "option-btn";
+                      if (state.selectedOption === optStr) cls += " selected";
+                      if (state.questionResult) {
+                        if (optStr === targetAnswerStr) cls += " correct";
+                        else if (state.selectedOption === optStr && !state.questionResult.correct) cls += " wrong";
+                      }
+                      return `
+                        <button
+                          type="button"
+                          class="${cls}"
+                          data-option="${escapeHtml(optStr)}"
+                        >
+                          <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1">
+                            <span class="option-letter">${String.fromCharCode(65 + idx)}</span>
+                            <span style="flex:1;word-break:break-word">${escapeHtml(optStr)}</span>
+                          </div>
+                          <span class="option-num">${idx + 1}</span>
+                        </button>
+                      `;
+                    })
+                    .join("")}
+                </div>
+              `
+          }
+
           ${
             state.questionResult
               ? `
                 <div class="feedback-banner ${state.questionResult.correct ? "ok" : "err"}">
-                  <strong>${state.questionResult.correct ? "✅ Resposta Correta!" : "❌ Tente novamente:"}</strong>
+                  <strong>${state.questionResult.correct ? "✅ Resposta Correta!" : "❌ Confira o gabarito:"}</strong>
                   <div style="margin-top:4px">${escapeHtml(
                     q.explanation ||
                       (state.questionResult.correct
                         ? "Excelente! Você dominou este conceito."
-                        : `A alternativa correta é: ${q.correctAnswer}`)
+                        : `A resposta correta é: ${targetAnswerStr}`)
                   )}</div>
                 </div>
               `
               : `
-                <div style="margin-top:12px;display:flex;justify-content:flex-end">
-                  <button type="button" class="btn btn-primary" id="btnVerifyAnswer" ${!state.selectedOption ? "disabled" : ""}>
+                <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
+                  ${
+                    isMultiWordType
+                      ? `<button type="button" class="btn" id="btnAutoFillWords">💡 Ver/Preencher Frase</button>`
+                      : ""
+                  }
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="btnVerifyAnswer"
+                    ${
+                      (isMultiWordType ? selectedWords.length === 0 : !state.selectedOption)
+                        ? "disabled"
+                        : ""
+                    }
+                  >
                     Confirmar Resposta
                   </button>
                 </div>
@@ -1871,6 +1974,9 @@
         </div>
       `;
     }
+
+    const rawSlideText = slide.markdown || slide.content || "";
+    const hasSlideBody = Boolean(rawSlideText && rawSlideText.trim().length > 0);
 
     root.innerHTML = `
       <div class="player-layout">
@@ -1983,9 +2089,13 @@
                 ${escapeHtml(slide.title || lesson.title)}
               </h1>
 
-              <div class="slide-content">
-                ${markdownToHtml(slide.content)}
-              </div>
+              ${
+                hasSlideBody
+                  ? `<div class="slide-content">${markdownToHtml(rawSlideText)}</div>`
+                  : !questionBlockHtml
+                  ? `<div class="slide-content">${markdownToHtml(lesson.description || "Conteúdo desta etapa pronto para estudo.")}</div>`
+                  : ""
+              }
 
               ${questionBlockHtml}
             </div>
@@ -2107,11 +2217,50 @@
       });
     });
 
+    root.querySelectorAll("[data-word-chip]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (state.questionResult && state.questionResult.correct) return;
+        const word = btn.getAttribute("data-word-chip");
+        if (!word) return;
+        const curr = Array.isArray(state.selectedOption) ? [...state.selectedOption] : [];
+        curr.push(word);
+        state.selectedOption = curr;
+        state.questionResult = null;
+        render();
+      });
+    });
+
+    const btnClearWords = document.getElementById("btnClearWords");
+    if (btnClearWords) {
+      btnClearWords.onclick = () => {
+        state.selectedOption = [];
+        state.questionResult = null;
+        render();
+      };
+    }
+
+    const btnAutoFillWords = document.getElementById("btnAutoFillWords");
+    if (btnAutoFillWords && rawCorrectList.length > 0) {
+      btnAutoFillWords.onclick = () => {
+        state.selectedOption = [...rawCorrectList];
+        state.questionResult = { correct: true };
+        render();
+      };
+    }
+
     const verifyBtn = document.getElementById("btnVerifyAnswer");
     if (verifyBtn && slide.question) {
       verifyBtn.onclick = () => {
-        const correct = state.selectedOption === slide.question.correctAnswer;
-        state.questionResult = { correct };
+        if (isMultiWordType) {
+          const userStr = (Array.isArray(state.selectedOption) ? state.selectedOption : []).join(" ").trim();
+          const expectedStr = rawCorrectList.join(" ").trim();
+          const correct = userStr.toLowerCase() === expectedStr.toLowerCase();
+          state.questionResult = { correct };
+        } else {
+          const expected = rawCorrectList[0] || slide.question.correctAnswer || "";
+          const correct = state.selectedOption === expected;
+          state.questionResult = { correct };
+        }
         render();
       };
     }
