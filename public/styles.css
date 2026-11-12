@@ -313,8 +313,8 @@ html:not(.dark) .btn-sync {
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #0e131f;
-  color: #fafafa;
+  background: linear-gradient(135deg, #fffdf7 0%, #fffbeb 55%, #fef3c7 100%);
+  color: var(--foreground);
   padding: 24px 22px;
   margin-bottom: 22px;
   display: flex;
@@ -322,6 +322,12 @@ html:not(.dark) .btn-sync {
   align-items: flex-end;
   justify-content: space-between;
   gap: 18px;
+  box-shadow: 0 8px 24px rgba(35, 34, 31, 0.06);
+}
+
+html.dark .mylms-hero {
+  background: #0e131f;
+  color: #fafafa;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -331,15 +337,23 @@ html:not(.dark) .btn-sync {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.85;
+  opacity: 0.12;
   z-index: 0;
+}
+
+html.dark .mylms-hero-bg {
+  opacity: 0.85;
 }
 
 .mylms-hero-gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(10, 10, 10, 0.94) 0%, rgba(10, 10, 10, 0.78) 60%, rgba(10, 10, 10, 0.55) 100%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 251, 235, 0.88) 65%, rgba(254, 243, 199, 0.75) 100%);
   z-index: 1;
+}
+
+html.dark .mylms-hero-gradient {
+  background: linear-gradient(90deg, rgba(10, 10, 10, 0.94) 0%, rgba(10, 10, 10, 0.78) 60%, rgba(10, 10, 10, 0.55) 100%);
 }
 
 .mylms-hero-content {
@@ -352,10 +366,14 @@ html:not(.dark) .btn-sync {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--primary);
+  color: #b65107;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   margin-bottom: 10px;
+}
+
+html.dark .mylms-hero-kicker {
+  color: var(--primary);
 }
 
 .mylms-hero h1 {
@@ -363,14 +381,22 @@ html:not(.dark) .btn-sync {
   font-size: 22px;
   font-weight: 800;
   line-height: 1.25;
+  color: var(--foreground);
+}
+
+html.dark .mylms-hero h1 {
   color: #ffffff;
 }
 
 .mylms-hero p {
   margin: 0;
   font-size: 13px;
-  color: #d6d5d4;
+  color: var(--muted-foreground);
   line-height: 1.5;
+}
+
+html.dark .mylms-hero p {
+  color: #d6d5d4;
 }
 
 .mylms-hero-actions {
@@ -394,6 +420,12 @@ html:not(.dark) .btn-sync {
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 999px;
+  background: rgba(253, 185, 19, 0.16);
+  border: 1px solid rgba(219, 117, 4, 0.35);
+  color: #79340e;
+}
+
+html.dark .tag {
   background: rgba(28, 28, 28, 0.85);
   border: 1px solid rgba(253, 185, 19, 0.35);
   color: #fee689;

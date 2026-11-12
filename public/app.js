@@ -5,7 +5,7 @@
 
   const state = {
     view: "catalog",
-    theme: localStorage.getItem("mylms_pocket_theme") || "dark",
+    theme: localStorage.getItem("mylms_pocket_theme_v2") || "light",
     simulatedOffline: false,
     onlineCourses: [],
     downloadedPackages: [],
@@ -552,7 +552,7 @@
           <button type="button" class="btn btn-primary" data-action="toggle-sim-offline">
             ${state.simulatedOffline ? "🌐 Voltar para Modo Online" : "✈️ Testar em Modo Avião"}
           </button>
-          <button type="button" class="btn" style="background:rgba(28,28,28,0.85);color:#fff;border-color:rgba(255,255,255,0.2)" data-action="import-json">
+          <button type="button" class="btn" data-action="import-json">
             📂 Importar Pacote (.json)
           </button>
         </div>
@@ -978,7 +978,7 @@
 
     document.getElementById("btnThemeToggle")?.addEventListener("click", () => {
       state.theme = state.theme === "dark" ? "light" : "dark";
-      localStorage.setItem("mylms_pocket_theme", state.theme);
+      localStorage.setItem("mylms_pocket_theme_v2", state.theme);
       applyTheme();
     });
 
