@@ -1,4 +1,4 @@
-const CACHE_NAME = "mylms-pocket-shell-v6";
+const CACHE_NAME = "mylms-pocket-shell-v7";
 const SHELL_ASSETS = [
   "/",
   "/index.html",

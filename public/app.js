@@ -668,27 +668,8 @@
       );
       if (!res.ok) throw new Error("Falha ao baixar pacote (" + res.status + ")");
       const bundle = await res.json();
-      state.downloadProgress = 55;
+      state.downloadProgress = 80;
       render();
-
-      const assets = [
-        ...((bundle.mediaManifest && bundle.mediaManifest.coreAssets) || []),
-        ...(includeVideo ? (bundle.mediaManifest && bundle.mediaManifest.optionalVideoAssets) || [] : []),
-      ];
-
-      if ("caches" in window && assets.length > 0) {
-        const cache = await caches.open(MEDIA_CACHE_NAME);
-        let done = 0;
-        for (const asset of assets) {
-          if (!asset || !asset.url) continue;
-          try {
-            await cache.add(new Request(asset.url, { mode: "no-cors" }));
-          } catch {}
-          done++;
-          state.downloadProgress = 55 + Math.round((done / assets.length) * 35);
-          render();
-        }
-      }
 
       const storedPkg = {
         ...bundle,
@@ -720,6 +701,22 @@
       state.downloadProgress = 100;
       showToast(`Curso "${bundle.course.title}" salvo no aparelho para estudo offline!`);
       render();
+
+      // Background media pre-caching so UI is instant (<1s)
+      const assets = [
+        ...((bundle.mediaManifest && bundle.mediaManifest.coreAssets) || []),
+        ...(includeVideo ? (bundle.mediaManifest && bundle.mediaManifest.optionalVideoAssets) || [] : []),
+      ].slice(0, 40);
+
+      if ("caches" in window && assets.length > 0) {
+        caches.open(MEDIA_CACHE_NAME).then((cache) => {
+          Promise.allSettled(
+            assets
+              .filter((a) => a && a.url)
+              .map((a) => cache.add(new Request(a.url, { mode: "no-cors" })))
+          );
+        }).catch(() => {});
+      }
     } catch (err) {
       state.downloadingSlug = null;
       state.downloadProgress = 0;
