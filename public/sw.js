@@ -1,12 +1,13 @@
-const CACHE_NAME = "mylms-pocket-shell-v10";
+const CACHE_NAME = "mylms-pocket-shell-v11";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
   "/app.js",
   "/manifest.webmanifest",
-  "/icon-192.png",
-  "/icon-512.png",
+  "/icon-192.png?v=2",
+  "/icon-512.png?v=2",
+  "/apple-touch-icon.png?v=2",
   "/logo-mylms-dark.png",
   "/logo-mylms-light.png",
   "/favicon-mylms-dark.png",
