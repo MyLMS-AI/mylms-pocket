@@ -6,8 +6,11 @@
   const MEDIA_CACHE_NAME = "mylms-pocket-media-v1";
   const THEME_KEY = "mylms_pocket_theme";
   const USER_STORAGE_KEY = "mylms_pocket_user";
+  const PASSPORT_STORAGE_KEY = "mylms_pocket_passport";
+  const PROFILES_STORAGE_KEY = "mylms_pocket_profiles";
   const EMAIL_STORAGE_KEY = "mylms_pocket_email";
   const LAST_ACTIVE_KEY = "mylms_pocket_last_active";
+  const OFFLINE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days offline validity
 
   const state = {
     view: "catalog", // "catalog" | "downloaded" | "course-dashboard" | "player" | "curation"
@@ -52,27 +55,78 @@
     },
   };
 
+  function loadSavedProfiles() {
+    try {
+      const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.filter((p) => p && p.email && (!p.expiresAt || p.expiresAt > Date.now())) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveProfileToDevice(userObj) {
+    if (!userObj || !userObj.email) return;
+    try {
+      const list = loadSavedProfiles().filter((p) => p.email.toLowerCase() !== userObj.email.toLowerCase());
+      list.unshift({
+        id: userObj.id,
+        name: userObj.name,
+        email: userObj.email,
+        role: userObj.role || "student",
+        passportToken: userObj.passportToken || null,
+        issuedAt: userObj.issuedAt || Date.now(),
+        expiresAt: userObj.expiresAt || Date.now() + OFFLINE_TTL_MS,
+      });
+      localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(list.slice(0, 5)));
+    } catch {}
+  }
+
   function loadSavedUser() {
     try {
       const raw = localStorage.getItem(USER_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.email) return null;
+      if (parsed.expiresAt && Date.now() > Number(parsed.expiresAt)) {
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
   }
 
-  function saveUser(user) {
-    state.user = user;
+  function saveUser(user, passport = null) {
     if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-      if (user.email) {
-        state.studentEmail = user.email;
-        localStorage.setItem(EMAIL_STORAGE_KEY, user.email);
+      const now = Date.now();
+      const enriched = {
+        ...user,
+        passportToken: (passport && passport.token) || user.passportToken || null,
+        issuedAt: (passport && passport.issuedAt) || user.issuedAt || now,
+        expiresAt: (passport && passport.expiresAt) || user.expiresAt || now + OFFLINE_TTL_MS,
+      };
+      state.user = enriched;
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(enriched));
+      if (passport) {
+        localStorage.setItem(PASSPORT_STORAGE_KEY, JSON.stringify(passport));
       }
+      if (enriched.email) {
+        state.studentEmail = enriched.email;
+        localStorage.setItem(EMAIL_STORAGE_KEY, enriched.email);
+      }
+      saveProfileToDevice(enriched);
     } else {
+      state.user = null;
       localStorage.removeItem(USER_STORAGE_KEY);
     }
     updateTopbarStatus();
+  }
+
+  function getOfflinePassportDaysLeft(userObj = state.user) {
+    if (!userObj || !userObj.expiresAt) return 30;
+    const diff = Number(userObj.expiresAt) - Date.now();
+    return Math.max(1, Math.ceil(diff / (24 * 60 * 60 * 1000)));
   }
 
   function loadLastActive() {
@@ -305,15 +359,34 @@
     if (!isEffectiveOnline()) return;
     try {
       const res = await fetch("/api/auth/get-session", { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data && data.user && data.user.email) {
-        saveUser({
-          id: data.user.id,
-          name: data.user.name || data.user.email.split("@")[0],
-          email: data.user.email,
-          role: data.user.role || "student",
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.user && data.user.email) {
+          saveUser(
+            {
+              id: data.user.id,
+              name: data.user.name || data.user.email.split("@")[0],
+              email: data.user.email,
+              role: data.user.role || "student",
+            },
+            data.offlinePassport || null
+          );
+          return;
+        }
+      }
+      // If browser session cookie expired but device holds a valid signed Offline Passport, verify & refresh it
+      if (state.user && state.user.passportToken) {
+        const vRes = await fetch("/api/auth/offline-passport/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: state.user.passportToken }),
         });
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          if (vData && vData.valid && vData.offlinePassport) {
+            saveUser(state.user, vData.offlinePassport);
+          }
+        }
       }
     } catch {}
   }
@@ -459,12 +532,15 @@
         throw new Error(data.message || "Código inválido ou expirado. Verifique e tente novamente.");
       }
 
-      saveUser({
-        id: data.user.id,
-        name: data.user.name || email.split("@")[0],
-        email: data.user.email || email,
-        role: data.user.role || (email === "andre@glededu.com" ? "super-admin" : "student"),
-      });
+      saveUser(
+        {
+          id: data.user.id,
+          name: data.user.name || email.split("@")[0],
+          email: data.user.email || email,
+          role: data.user.role || (email === "andre@glededu.com" ? "super-admin" : "student"),
+        },
+        data.offlinePassport || null
+      );
 
       const pending = state.authModal.pendingAction;
       closeAuthModal();
@@ -511,21 +587,26 @@
     const logoSrc = state.theme === "dark" ? "/logo-mylms-light.png" : "/logo-mylms-dark.png";
 
     if (state.user && state.authModal.step === "email" && !state.authModal.pendingAction) {
+      const daysLeft = getOfflinePassportDaysLeft(state.user);
       body.innerHTML = `
         <div style="text-align:center;margin-bottom:18px">
           <img src="${logoSrc}" alt="MyLMS" class="brand-logo" style="height:32px;margin:0 auto 12px" />
-          <h2 id="authModalTitle" style="margin:0;font-size:20px;font-weight:800">Sua Conta MyLMS</h2>
-          <p style="margin:6px 0 0;font-size:13px;color:var(--muted-foreground)">Conectado para baixar cursos e sincronizar progresso</p>
+          <h2 id="authModalTitle" style="margin:0;font-size:20px;font-weight:800">Sua Conta &amp; Passaporte Offline</h2>
+          <p style="margin:6px 0 0;font-size:13px;color:var(--muted-foreground)">Identidade conferida para estudo online e sem internet</p>
         </div>
         <div style="padding:14px;border-radius:14px;background:var(--surface-950);border:1px solid var(--border);margin-bottom:18px">
           <div style="font-size:15px;font-weight:800">${escapeHtml(state.user.name)}</div>
           <div style="font-size:13px;color:var(--muted-foreground);margin-top:2px">${escapeHtml(state.user.email)}</div>
-          <div style="margin-top:8px">
-            <span class="pill pill-cached">✓ Conta Oficial MyLMS Ativa</span>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+            <span class="pill pill-cached">✓ Conta Oficial MyLMS</span>
+            <span class="pill pill-online">🛡️ Passaporte Offline: ${daysLeft} dias</span>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:var(--muted-foreground);line-height:1.4">
+            Seu progresso e fila de sincronização ficam vinculados com segurança ao seu ID mesmo quando você estiver sem internet.
           </div>
         </div>
         <div style="display:flex;gap:10px;justify-content:flex-end">
-          <button type="button" class="btn" id="btnSwitchAccount">Trocar Conta</button>
+          <button type="button" class="btn" id="btnSwitchAccount">Trocar Aluno</button>
           <button type="button" class="btn btn-danger" id="btnSignOutModal">Sair da Conta</button>
         </div>
       `;
@@ -545,14 +626,46 @@
     }
 
     if (state.authModal.step === "email") {
+      const savedProfiles = loadSavedProfiles();
       body.innerHTML = `
         <div style="text-align:center;margin-bottom:18px">
           <img src="${logoSrc}" alt="MyLMS" class="brand-logo" style="height:32px;margin:0 auto 12px" />
-          <h2 id="authModalTitle" style="margin:0;font-size:20px;font-weight:800">Entrar com sua conta MyLMS</h2>
+          <h2 id="authModalTitle" style="margin:0;font-size:20px;font-weight:800">Conferência de Acesso MyLMS</h2>
           <p style="margin:6px 0 0;font-size:13px;color:var(--muted-foreground)">
-            Use o mesmo e-mail da plataforma <strong>MyLMS</strong> para liberar o download dos seus cursos e sincronizar seu certificado.
+            Autentique seu e-mail para emitir seu <strong>Passaporte Offline (válido por 30 dias sem internet)</strong> e liberar o download dos seus cursos.
           </p>
         </div>
+        ${
+          savedProfiles.length > 0
+            ? `
+              <div style="margin-bottom:16px;padding:12px;border-radius:12px;background:var(--surface-950);border:1px solid var(--border)">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:8px">
+                  ⚡ Passaportes Salvos neste Aparelho (Funciona Offline)
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  ${savedProfiles
+                    .map(
+                      (p, idx) => `
+                        <button
+                          type="button"
+                          class="btn"
+                          data-restore-profile-idx="${idx}"
+                          style="width:100%;justify-content:space-between;text-align:left;height:auto;padding:8px 12px"
+                        >
+                          <span style="min-width:0;overflow:hidden;text-overflow:ellipsis">
+                            <strong style="display:block;font-size:13px">${escapeHtml(p.name)}</strong>
+                            <span style="font-size:11px;color:var(--muted-foreground)">${escapeHtml(p.email)}</span>
+                          </span>
+                          <span class="pill pill-cached" style="flex-shrink:0">Entrar →</span>
+                        </button>
+                      `
+                    )
+                    .join("")}
+                </div>
+              </div>
+            `
+            : ""
+        }
         ${
           state.authModal.error
             ? `<div style="padding:10px 12px;border-radius:10px;background:rgba(218,30,40,0.12);border:1px solid rgba(218,30,40,0.4);color:var(--danger);font-size:13px;margin-bottom:12px">${escapeHtml(state.authModal.error)}</div>`
@@ -560,7 +673,7 @@
         }
         <form id="authEmailForm" style="display:flex;flex-direction:column;gap:12px">
           <div>
-            <label for="authEmailField" style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;color:var(--muted-foreground)">SEU E-MAIL DO MYLMS</label>
+            <label for="authEmailField" style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;color:var(--muted-foreground)">CONECTAR NOVA CONTA MYLMS</label>
             <input
               id="authEmailField"
               type="email"
@@ -576,6 +689,22 @@
           </button>
         </form>
       `;
+
+      body.querySelectorAll("[data-restore-profile-idx]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const idx = Number(btn.getAttribute("data-restore-profile-idx")) || 0;
+          const prof = savedProfiles[idx];
+          if (!prof) return;
+          saveUser(prof);
+          const pending = state.authModal.pendingAction;
+          closeAuthModal();
+          showToast(`Passaporte Offline ativado para ${prof.name}!`);
+          render();
+          if (pending && pending.type === "download" && pending.slug) {
+            await downloadCoursePackage(pending.slug, Boolean(pending.includeVideo));
+          }
+        });
+      });
 
       const form = document.getElementById("authEmailForm");
       if (form) {
@@ -1424,7 +1553,7 @@
                                   style="flex:1"
                                   ${isDownloading ? "disabled" : ""}
                                 >
-                                  ${state.user ? "⬇️ Baixar Curso Offline" : "🔑 Entrar e Baixar Curso"}
+                                  ⬇️ Baixar Curso Offline
                                 </button>
                               `
                           }

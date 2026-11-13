@@ -1,4 +1,5 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +9,8 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const PORT = Number(process.env.PORT || 3090);
 const UPSTREAM_API = (process.env.MYLMS_API_URL || "https://plataforma.mylms.ai/api").replace(/\/$/, "");
 const UPSTREAM_ORIGIN = new URL(UPSTREAM_API).origin;
+const PASSPORT_SECRET = process.env.OFFLINE_PASSPORT_SECRET || "mylms-pocket-offline-passport-secret-2026-v1";
+const PASSPORT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days offline validity
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -19,6 +22,42 @@ const MIME_TYPES = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
+
+function signOfflinePassport(user) {
+  const now = Date.now();
+  const payload = {
+    userId: String(user.id || user.userId || user.email),
+    email: String(user.email || "").toLowerCase(),
+    name: String(user.name || user.email || "Aluno MyLMS"),
+    role: String(user.role || (user.email === "andre@glededu.com" ? "super-admin" : "student")),
+    issuedAt: now,
+    expiresAt: now + PASSPORT_TTL_MS,
+    version: 1,
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const sig = crypto.createHmac("sha256", PASSPORT_SECRET).update(payloadB64).digest("base64url");
+  return {
+    ...payload,
+    token: `${payloadB64}.${sig}`,
+  };
+}
+
+function verifyOfflinePassportToken(token) {
+  if (!token || typeof token !== "string" || !token.includes(".")) return null;
+  const [payloadB64, sig] = token.split(".");
+  if (!payloadB64 || !sig) return null;
+  const expectedSig = crypto.createHmac("sha256", PASSPORT_SECRET).update(payloadB64).digest("base64url");
+  if (sig !== expectedSig) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+    if (!payload || !payload.email || !payload.expiresAt || Date.now() > Number(payload.expiresAt)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 async function readBodyBuffer(req) {
   const chunks = [];
@@ -53,6 +92,28 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Endpoint to verify or refresh an Offline Passport Token
+  if (reqUrl.pathname === "/api/auth/offline-passport/verify" && req.method === "POST") {
+    try {
+      const bodyBuffer = await readBodyBuffer(req);
+      const body = JSON.parse(bodyBuffer.toString("utf8") || "{}");
+      const verified = verifyOfflinePassportToken(body.token || req.headers["x-offline-passport"]);
+      if (!verified) {
+        res.writeHead(401, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ valid: false, error: "Passaporte offline expirado ou inválido" }));
+        return;
+      }
+      // Re-issue a fresh 30-day passport when verified online
+      const refreshed = signOfflinePassport(verified);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({ valid: true, offlinePassport: refreshed }));
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ valid: false, error: "Requisição inválida" }));
+    }
+    return;
+  }
+
   // Proxy /api/auth/* to MyLMS BetterAuth (/auth/secure/* on UPSTREAM_API)
   if (reqUrl.pathname.startsWith("/api/auth/")) {
     let subPath = reqUrl.pathname.replace(/^\/api\/auth/, "");
@@ -82,9 +143,22 @@ const server = http.createServer(async (req, res) => {
         body: ["GET", "HEAD"].includes(req.method || "GET") ? undefined : bodyBuffer,
       });
 
-      const responseBytes = Buffer.from(await upstreamRes.arrayBuffer());
+      let responseBytes = Buffer.from(await upstreamRes.arrayBuffer());
+      const contentType = upstreamRes.headers.get("content-type") || "application/json; charset=utf-8";
+
+      // If sign-in or get-session returned a user JSON, attach a signed 30-day offlinePassport
+      if (upstreamRes.ok && contentType.includes("application/json")) {
+        try {
+          const parsed = JSON.parse(responseBytes.toString("utf8"));
+          if (parsed && parsed.user && parsed.user.email) {
+            parsed.offlinePassport = signOfflinePassport(parsed.user);
+            responseBytes = Buffer.from(JSON.stringify(parsed), "utf8");
+          }
+        } catch {}
+      }
+
       const outHeaders = {
-        "Content-Type": upstreamRes.headers.get("content-type") || "application/json; charset=utf-8",
+        "Content-Type": contentType,
         "Cache-Control": "no-store",
       };
       const rawCookies = upstreamRes.headers.getSetCookie
@@ -129,6 +203,14 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.headers["authorization"]) {
         headers["Authorization"] = req.headers["authorization"];
+      }
+      const passportHeader = req.headers["x-offline-passport"];
+      if (passportHeader) {
+        const verified = verifyOfflinePassportToken(String(passportHeader));
+        if (verified && verified.email) {
+          headers["X-Offline-Verified-Email"] = verified.email;
+          headers["X-Offline-Verified-User-Id"] = verified.userId;
+        }
       }
 
       const upstreamRes = await fetch(targetUrl, {
